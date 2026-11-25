@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # craft-mirror.sh - mirror installers from GitHub releases into a local folder,
 # keeping the newest N versions per project. Versions containing a `.keep` file
-# SPDX-License-Identifier: MIT OR Apache-2.0
 # are never pruned.
 #
 # Layout:  $DEST_DIR/<project>/<tag>/<installer files>
