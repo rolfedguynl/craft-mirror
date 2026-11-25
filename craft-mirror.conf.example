@@ -1,0 +1,82 @@
+# craft-mirror.conf - sourced by craft-mirror.sh (bash syntax).
+# Copy to craft-mirror.conf next to the script, or pass with -c.
+# Contains an optional token: chmod 600 this file.
+
+# Where installers are stored: $DEST_DIR/<project>/<tag>/
+# Any folder you like. A relative path is taken relative to the script's folder.
+# Can also be overridden per run with -d DIR or the CRAFT_MIRROR_DEST variable.
+DEST_DIR="/srv/installers"
+
+# Global defaults (each can be overridden per project as <project>_<SETTING>)
+KEEP=5                     # unpinned versions to keep per project (0 = keep all)
+FETCH_COUNT=1              # newest N releases to make sure are present each run
+PLATFORMS="windows linux"  # any of: windows linux macos (or your own PATTERN_<name>)
+INCLUDE_PRERELEASE=false   # true / false
+VERIFY_SHA256=true         # check files against a SHA256SUMS asset when present
+GITHUB_TOKEN=""            # optional: higher API rate limit, required for private repos
+LOCK_FILE="/tmp/craft-mirror.lock"
+
+# Which release assets belong to a platform (regex on the asset file name).
+# Defaults: x64 .exe/.msi installers; x86_64 AppImage; .dmg.
+# Leading [0-9] = versioned files only (some apps also ship unversioned copies).
+PATTERN_windows='[0-9][^/]*[_-]x64([_-][^/]*)?\.(exe|msi)$'
+# AppImage is the most versatile Linux format: one file that runs on any distro
+# (Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE, ...) without installing or root.
+PATTERN_linux='[0-9][^/]*-linux-x86_64\.AppImage$'
+# Also want distro packages?  PATTERN_linux='[0-9][^/]*-linux-x86_64\.(AppImage|deb|rpm)$'
+PATTERN_macos='[0-9][^/]*\.dmg$'
+# e.g. add portable zips:  PATTERN_windows='[0-9][^/]*-windows-x64(-portable\.zip|\.msi)$'
+EXTRA_PATTERN='^SHA256SUMS(\.txt)?$'   # downloaded with every platform ("" = off)
+
+# Projects to mirror. Names with "-" use "_" in setting names (my-app -> my_app_REPO).
+PROJECTS=(artcraft)
+
+# --- Apps from the ArtCraft Launcher catalog --------------------------------
+# The launcher lists "official" apps (PhotoCraft, FilmCraft, WordCraft, ...) and
+# "community" apps it supports (MailCraft, SolidCraft, ...). Run
+#   ./craft-mirror.sh catalog
+# to see them all. Their repos come from the catalog; settings per app work the
+# same as for PROJECTS (mailcraft_KEEP=3, craft_anything_PLATFORMS=..., etc.).
+CATALOG_URLS="https://getartcraft.com/launcher-catalog.toml
+              https://raw.githubusercontent.com/storytold/craft-launcher/HEAD/crates/core/catalog.toml"
+                             # tried in order; the 2nd is the launcher's source repo
+
+# The catalog is saved on every run, so the mirror keeps working when the launcher
+# site is down or the catalog is taken down or changed:
+#   <CATALOG_DIR>/launcher-catalog.toml   latest copy (+ .sig when the site serves one)
+#   <CATALOG_DIR>/archive/                every distinct version ever downloaded
+#   <CATALOG_DIR>/known-apps.tsv          every app ever seen, with its GitHub repo
+# Apps keep updating straight from GitHub, using known-apps.tsv.
+CATALOG_DIR=""               # "" = $DEST_DIR/launcher-catalog
+CATALOG_SAVE=true            # save the catalog even when CATALOG_KINDS is ""
+CATALOG_KEEP_REMOVED=true    # keep mirroring apps that get removed from the catalog
+
+CATALOG_KINDS=""          # "" = off | "official" | "community" | "official community"
+CATALOG_INCLUDE=""           # only these ids, e.g. "mailcraft photocraft" ("" = all of CATALOG_KINDS)
+CATALOG_EXCLUDE=""           # skip these ids
+
+# Example: the office suite. Documents, PDF, presentations, spreadsheets and mail.
+# MailCraft is a "community" app, the others are "official", so both kinds are on.
+CATALOG_KINDS="official community"
+CATALOG_INCLUDE="pdfcraft wordcraft deckcraft gridcraft mailcraft"
+# mailcraft_KEEP=3                     # per-app settings still work
+#
+# Other examples:
+#   everything the launcher offers:   CATALOG_KINDS="official community"
+#   only MailCraft:                   CATALOG_KINDS="community"; CATALOG_INCLUDE="mailcraft"
+#   all official apps + MailCraft:    put "mailcraft" in PROJECTS and CATALOG_KINDS="official"
+#                                     (a catalog app named in PROJECTS gets its repo from the catalog)
+
+# --- artcraft ---------------------------------------------------------------
+artcraft_REPO="storytold/artcraft"
+artcraft_PLATFORMS="windows linux"
+artcraft_KEEP=5
+# Narrow it down, e.g. only the Windows setup.exe and the Linux AppImage + deb:
+# artcraft_PATTERN_windows='_x64-setup\.exe$'
+# artcraft_PATTERN_linux='linux-x86_64\.(AppImage|deb)$'
+
+# --- another project (example) ---------------------------------------------
+# PROJECTS=(artcraft my-app)
+# my_app_REPO="someorg/my-app"
+# my_app_PLATFORMS="windows"
+# my_app_KEEP=3

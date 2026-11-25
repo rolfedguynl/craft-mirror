@@ -1,0 +1,9 @@
+# Local config (may contain a GITHUB_TOKEN)
+craft-mirror.conf
+*.conf
+!craft-mirror.conf.example
+
+# If DEST_DIR is set to a folder inside the repo
+installers/
+launcher-catalog/
+*.part
