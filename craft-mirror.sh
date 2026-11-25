@@ -8,7 +8,8 @@
 #          $DEST_DIR/<project>/<tag>/.complete   (written after a successful download)
 #          $DEST_DIR/<project>/<tag>/.keep       (pin: never delete this version)
 #
-# Requires: bash 4+, curl, jq. Optional: flock, sha256sum.
+# Requires: bash 4.3+, curl, jq, and sha256sum or shasum when VERIFY_SHA256=true
+# (the default). Optional: flock (prevents overlapping runs).
 
 set -euo pipefail
 
@@ -260,6 +261,52 @@ cmd_catalog() {
   echo "Saved in: $(catalog_dir)"
 }
 
+# ---------------------------------------------------------------- checksums
+have_sha256() { command -v sha256sum >/dev/null || command -v shasum >/dev/null; }
+
+sha256_of() {
+  if command -v sha256sum >/dev/null; then sha256sum -- "$1" | cut -d' ' -f1
+  else shasum -a 256 -- "$1" | cut -d' ' -f1; fi
+}
+
+# verify_release <project> <tag> <dir>: check every downloaded file against the
+# release's SHA256SUMS file. Fails on a mismatch, or when no SHA-256 tool is
+# installed. Warns (but passes) when the release has no SHA256SUMS file or a
+# file isn't listed in it, since there is nothing to check against then.
+verify_release() {
+  local p="$1" tag="$2" vdir="$3" sums f expected actual ok=0 unlisted=0
+  have_sha256 || { err "$p $tag: VERIFY_SHA256=true but neither sha256sum nor shasum is installed"; return 1; }
+
+  sums=$(find "$vdir" -maxdepth 1 -type f -iname 'SHA256SUMS*' ! -name '*.part' | head -n1)
+  if [[ -z $sums ]]; then
+    warn "$p $tag: release has no SHA256SUMS file (or EXTRA_PATTERN skips it), files NOT verified"
+    return 0
+  fi
+
+  for f in "$vdir"/*; do
+    [[ -f $f && $f != "$sums" && $f != *.part ]] || continue
+    f=$(basename "$f")
+    # Lines look like "<hash>  <name>" or "<hash> *<name>", name possibly with a path.
+    expected=$(awk -v n="$f" '{
+        name = $2; sub(/^\*/, "", name)
+        if (name == n || substr(name, length(name) - length(n)) == "/" n) { print tolower($1); exit }
+      }' "$sums")
+    if [[ -z $expected ]]; then
+      warn "$p $tag: $f is not listed in $(basename "$sums"), NOT verified"
+      unlisted=$((unlisted + 1))
+      continue
+    fi
+    actual=$(sha256_of "$vdir/$f")
+    if [[ $actual != "$expected" ]]; then
+      err "$p $tag: $f checksum MISMATCH (expected $expected, got $actual)"
+      return 1
+    fi
+    ok=$((ok + 1))
+  done
+  if (( unlisted )); then log "$p $tag: $ok file(s) verified with SHA-256, $unlisted unlisted"
+  else log "$p $tag: $ok file(s) verified with SHA-256"; fi
+}
+
 # ---------------------------------------------------------------- core
 # download_release <project> <releases-json-array> <tag> <published> <regex>
 download_release() {
@@ -301,16 +348,11 @@ download_release() {
     mv -f "$vdir/$name.part" "$vdir/$name"
   done <<<"$assets"
 
-  if [[ $(pvar "$p" VERIFY_SHA256 "$VERIFY_SHA256") == true ]] && command -v sha256sum >/dev/null; then
-    local sums
-    sums=$(find "$vdir" -maxdepth 1 -type f -iname 'SHA256SUMS*' ! -name '*.part' | head -n1)
-    if [[ -n $sums ]]; then
-      if ! (cd "$vdir" && sha256sum -c --ignore-missing --quiet "$(basename "$sums")"); then
-        err "$p $tag: checksum verification failed, removing download"
-        rm -rf -- "$vdir"
-        return 1
-      fi
-      log "$p $tag: checksums OK"
+  if [[ $(pvar "$p" VERIFY_SHA256 "$VERIFY_SHA256") == true ]]; then
+    if ! verify_release "$p" "$tag" "$vdir"; then
+      err "$p $tag: checksum verification failed, removing download (retried next run)"
+      rm -rf -- "$vdir"
+      return 1
     fi
   fi
 
@@ -439,6 +481,9 @@ source "$CONFIG"
 [[ $DEST_DIR == /* ]] || DEST_DIR="$SCRIPT_DIR/$DEST_DIR"   # relative = next to the script
 
 for dep in curl jq; do command -v "$dep" >/dev/null || die "missing dependency: $dep"; done
+if [[ $VERIFY_SHA256 == true ]] && ! have_sha256; then
+  die "VERIFY_SHA256=true needs sha256sum (coreutils) or shasum; install one or set VERIFY_SHA256=false"
+fi
 
 cmd="${1:-run}"; shift || true
 

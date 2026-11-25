@@ -6,7 +6,8 @@ per project and lets you pin versions so they're kept forever.
 
 ## Install (Linux)
 
-You need `bash`, `curl` and `jq`:
+You need `bash` 4.3+, `curl`, `jq` and `sha256sum` (part of coreutils, already on
+every normal Linux install; used to verify downloads, see `VERIFY_SHA256`):
 
 ```sh
 sudo apt install curl jq        # Debian/Ubuntu

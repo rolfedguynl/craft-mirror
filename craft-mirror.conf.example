@@ -12,7 +12,9 @@ KEEP=5                     # unpinned versions to keep per project (0 = keep all
 FETCH_COUNT=1              # newest N releases to make sure are present each run
 PLATFORMS="windows linux"  # any of: windows linux macos (or your own PATTERN_<name>)
 INCLUDE_PRERELEASE=false   # true / false
-VERIFY_SHA256=true         # check files against a SHA256SUMS asset when present
+VERIFY_SHA256=true         # check every file against the release's SHA256SUMS; a mismatch
+                           # deletes the download (retried next run). Needs sha256sum
+                           # (coreutils) or shasum, or the script refuses to start.
 GITHUB_TOKEN=""            # optional: higher API rate limit, required for private repos
 LOCK_FILE="/tmp/craft-mirror.lock"
 
